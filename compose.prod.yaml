@@ -1,13 +1,53 @@
-# docker compose --env-file .env.prod -f compose.yaml -f compose.prod.yaml up -d --build
+# Archivo autónomo para Dokploy. No combinar con compose.yaml.
+# Dokploy suministra las variables desde Environment.
 name: mapa-prod
 services:
-  api:
+  db:
+    image: postgres:16-alpine
+    command: ["postgres", "-p", "5544"]
     environment:
-      FRONTEND_URL: ${FRONTEND_URL:?Configure el dominio del mapa}
-    ports:
-      - "127.0.0.1:8091:8091"
+      POSTGRES_DB: geolocalizacion
+      POSTGRES_USER: geolocalizacion
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configure esta variable en Environment de Dokploy}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -p 5544 -U geolocalizacion -d geolocalizacion"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgres://geolocalizacion:${POSTGRES_PASSWORD}@db:5544/geolocalizacion?sslmode=disable
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Configure esta variable en Environment de Dokploy}
+      FRONTEND_URL: ${FRONTEND_URL:-https://mapa.vmbperu.com}
+      SEED_FILE: /data/escuelas.json
+    expose:
+      - "8091"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8091/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
   web:
     build:
       context: ./mapa-educativo-react
       args:
-        VITE_API_URL: ${BACKEND_URL:?Configure el dominio del backend}/api
+        VITE_API_URL: ${BACKEND_URL:-https://mapabackend.vmbperu.com}/api
+    expose:
+      - "8090"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  postgres_data:

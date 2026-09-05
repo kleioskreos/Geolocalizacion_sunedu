@@ -48,7 +48,7 @@ Dominios de producción: `https://mapa.vmbperu.com` y `https://mapabackend.vmbpe
 Para producción, copie `.env.prod.example` a `.env.prod` y complete contraseñas propias del mapa:
 
 ```powershell
-docker compose --env-file .env.prod -f compose.yaml -f compose.prod.yaml up -d --build
+docker compose --env-file .env.prod -f compose.prod.yaml up -d --build
 ```
 
 Este comando crea el stack independiente `mapa-prod`, con su propio volumen. En Dokploy o el proxy inverso, configure `mapa.vmbperu.com` hacia el servicio `web`, puerto **8090**, y `mapabackend.vmbperu.com` hacia `api`, puerto **8091**. Configure DNS y certificados HTTPS para ambos dominios. Si el proxy corre en otro contenedor, debe tener acceso a la red del stack; no utilice su propio localhost como destino. No se modifican las redes ni las rutas del otro proyecto.
@@ -134,3 +134,22 @@ Los archivos anteriores `mapa-educativo.html` y `parse_xls.py` se conservan como
 La bienvenida automática está desactivada. La apariencia VMB se adaptó de la captura aportada: azul marino, campos celestes, acentos azules y títulos serif. Las fuentes Inter y Playfair Display se sirven localmente.
 
 La importación no solicita usuario. El servidor valida la contraseña con bcrypt y mantiene el límite de intentos. `ADMIN_USER` es un identificador interno; no se introduce en la interfaz.
+
+
+## Desplegar en Dokploy
+
+`compose.yaml` es el despliegue local. `compose.prod.yaml` es ahora autónomo y contiene db, api y web; no se deben combinar los dos archivos.
+
+1. Suba los archivos modificados a la rama que Dokploy utiliza.
+2. Configure la ruta Compose como `./compose.prod.yaml`.
+3. En Environment, pegue las variables de `.env.prod` (archivo privado) o complete `.env.prod.example`. Dokploy no lee automáticamente un archivo llamado `.env.prod`; sus variables deben estar en Environment. En terminal sí se utiliza `--env-file .env.prod`.
+4. En Domains agregue `mapa.vmbperu.com` para el servicio `web`, puerto 8090, y `mapabackend.vmbperu.com` para `api`, puerto 8091. Use ruta `/` y HTTPS. No añada `/api` al dominio base: el frontend lo incorpora al compilar.
+5. Despliegue y espere a que la base de datos y la API estén saludables.
+
+Producción no publica puertos en el host. Dokploy administra las rutas y redes del proxy mediante Domains. No hay que escribir labels manuales ni compartir la base de datos con el otro proyecto. El archivo de semilla se incluye en la imagen de la API, evitando depender de montajes de archivos del repositorio en el servidor.
+
+Mantenga el nombre de aplicación/proyecto que Dokploy ya asignó (`vmb-mapa-fon9ee`) para conservar el volumen `postgres_data` asociado. No elimine volúmenes ni cambie POSTGRES_PASSWORD de una base ya inicializada: cambiar la variable no modifica la contraseña almacenada en PostgreSQL.
+
+`ADMIN_USER` es interno y el formulario pide solo `ADMIN_PASSWORD`. `FRONTEND_DOMAIN`, `BACKEND_DOMAIN` y `STACK_NAME` del entorno local eran informativos; no crean dominios ni sustituyen el nombre `-p` de Dokploy. No son necesarios en producción. `WEB_PORT` se utiliza únicamente para el acceso local.
+
+Referencia: https://docs.dokploy.com/docs/core/docker-compose/domains
