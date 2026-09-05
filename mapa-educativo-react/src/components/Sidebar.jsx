@@ -2,16 +2,18 @@ import { useMemo, useState } from 'react';
 import { departamentos, getColorForNivel } from '../data/sigmedData';
 const emptyFilters = {searchText:'',depto:'',prov:'',dist:'',dre:'',ugel:'',cpp:'',selectedNiveles:[],gestion:''};
 const unique = (rows,key) => [...new Set(rows.map(s=>s[key]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+const comparable = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
 export function Sidebar({ schools, onSearch, onClear, onDeptoSelect, collapsed, onToggle, loading, onImport }) {
  const [filters,setFilters]=useState(emptyFilters);
  const set=(key,value)=>setFilters(f=>({...f,[key]:value,...(key==='depto'?{prov:'',dist:''}:{}),...(key==='prov'?{dist:''}:{}),...(key==='dre'?{ugel:''}:{})}));
  const options=useMemo(()=>{
-  const department=departamentos.find(d=>d.cod===filters.depto)?.nombre;
-  const dre=departamentos.find(d=>d.cod===filters.dre)?.nombre;
-  return {provinces:unique(schools.filter(s=>s.departamento===department),'provincia'),districts:unique(schools.filter(s=>s.departamento===department&&s.provincia===filters.prov),'distrito'),ugels:unique(schools.filter(s=>s.departamento===dre),'dreUgel'),levels:unique(schools,'nivel'),management:unique(schools,'gestion')};
+ const department=departamentos.find(d=>d.cod===filters.depto)?.nombre;
+ const dre=departamentos.find(d=>d.cod===filters.dre)?.nombre;
+  const loadedDepartments=new Set(schools.map(s=>comparable(s.departamento)));
+  return {availableDepartments:departamentos.filter(d=>loadedDepartments.has(comparable(d.nombre))),provinces:unique(schools.filter(s=>comparable(s.departamento)===comparable(department)),'provincia'),districts:unique(schools.filter(s=>comparable(s.departamento)===comparable(department)&&s.provincia===filters.prov),'distrito'),ugels:unique(schools.filter(s=>comparable(s.departamento)===comparable(dre)),'dreUgel'),levels:unique(schools,'nivel'),management:unique(schools,'gestion')};
  },[schools,filters.depto,filters.prov,filters.dre]);
  const select=(key,label,values,disabled=false)=><label className="filter-field"><span>{label}</span><select aria-label={label} value={filters[key]} disabled={disabled} onChange={e=>set(key,e.target.value)}><option value="">Seleccionar...</option>{values.map(v=><option key={v} value={v}>{v}</option>)}</select></label>;
- const deptSelect=(key,label)=><label className="filter-field"><span>{label}</span><select aria-label={label} value={filters[key]} onChange={e=>{set(key,e.target.value);if(key==='depto'){const d=departamentos.find(d=>d.cod===e.target.value);if(d)onDeptoSelect(d)}}}><option value="">Seleccionar...</option>{departamentos.map(d=><option key={d.cod} value={d.cod}>{d.cod}. {d.nombre}</option>)}</select></label>;
+ const deptSelect=(key,label)=><label className="filter-field"><span>{label}</span><select aria-label={label} value={filters[key]} onChange={e=>{set(key,e.target.value);if(key==='depto'){const d=options.availableDepartments.find(d=>d.cod===e.target.value);if(d)onDeptoSelect(d)}}}><option value="">Seleccionar...</option>{options.availableDepartments.map(d=><option key={d.cod} value={d.cod}>{d.cod}. {d.nombre}</option>)}</select></label>;
  return <><aside className={'sidebar '+(collapsed?'collapsed':'')} aria-label="Filtros de búsqueda"><form onSubmit={e=>{e.preventDefault();onSearch(filters)}}>
   <details open className="sb-section"><summary>Buscar <span>⌕</span></summary><input className="search-box" aria-label="Nombre o código del servicio" value={filters.searchText} onChange={e=>set('searchText',e.target.value)}/><p className="search-help">Nombre del servicio, código modular,<br/> código de institución ó código de local</p></details>
   <details open className="sb-section"><summary>Ámbito político administrativo</summary>{deptSelect('depto','Departamento:')}{select('prov','Provincia:',options.provinces,!filters.depto)}{select('dist','Distrito:',options.districts,!filters.prov)}</details>
