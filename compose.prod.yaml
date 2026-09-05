@@ -1,0 +1,13 @@
+# docker compose --env-file .env.prod -f compose.yaml -f compose.prod.yaml up -d --build
+name: mapa-prod
+services:
+  api:
+    environment:
+      FRONTEND_URL: ${FRONTEND_URL:?Configure el dominio del mapa}
+    ports:
+      - "127.0.0.1:8091:8091"
+  web:
+    build:
+      context: ./mapa-educativo-react
+      args:
+        VITE_API_URL: ${BACKEND_URL:?Configure el dominio del backend}/api

@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {filterSchools} from './filters.js';
+import {csvCell,toCSV} from './export.js';
+const filters={searchText:'',depto:'',prov:'',dist:'',dre:'',ugel:'',cpp:'',gestion:'',selectedNiveles:[]};
+const records=[{nombre:'Jardín José',codigoModular:'00123',departamento:'PUNO',provincia:'PUNO',distrito:'PUNO',nivel:'Inicial - Jardín',gestion:'Pública - Sector Educación',dreUgel:'PUNO'},{nombre:'Otra escuela',departamento:'PUNO',provincia:'PUNO',distrito:'PUNO NORTE',nivel:'Primaria'}];
+test('Búsqueda sin acentos y códigos con ceros',()=>{assert.equal(filterSchools(records,{...filters,searchText:'jardin jose'}).length,1);assert.equal(filterSchools(records,{...filters,searchText:'00123'}).length,1)});
+test('El distrito se compara exactamente',()=>assert.equal(filterSchools(records,{...filters,dist:'PUNO'}).length,1));
+test('Filtros combinados y resultado vacío',()=>{assert.equal(filterSchools(records,{...filters,depto:'21',selectedNiveles:['Primaria']}).length,1);assert.equal(filterSchools(records,{...filters,depto:'15'}).length,0)});
+test('CSV escapa comillas y fórmulas sin alterar coordenadas',()=>{assert.equal(csvCell('a"b'),'"a""b"');assert.equal(csvCell('=1+1'),'"\'=1+1"');assert.equal(csvCell(-15.5),'"-15.5"');assert.equal(toCSV([]).split('\r\n').length,1)});

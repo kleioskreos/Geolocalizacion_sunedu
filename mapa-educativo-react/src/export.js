@@ -1,0 +1,3 @@
+export const headers=['Código Institución','Código Modular','Nombre','Ubigeo','Centro Poblado','Distrito','Provincia','Departamento','DRE/UGEL','Código Local','Dirección','Nivel/Modalidad','Gestión/Dependencia','Latitud','Longitud','Altitud','Fuente Coordenadas'];
+export function csvCell(value){let text=String(value??'');if(/^\s*[=+@-]/.test(text)&&typeof value!=='number')text="'"+text;return '"'+text.replaceAll('"','""')+'"'}
+export function toCSV(data){return [headers,...data.map(s=>[s.codigoInstitucion,s.codigoModular,s.nombre,s.ubigeo,s.centroPoblado,s.distrito,s.provincia,s.departamento,s.dreUgel,s.codigoLocal,s.direccion,s.nivel,s.gestion,s.lat,s.lng,s.altitud,s.fuenteCoordenadas])].map(row=>row.map(csvCell).join(',')).join('\r\n')}

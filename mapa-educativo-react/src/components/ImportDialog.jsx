@@ -1,0 +1,9 @@
+import {useState} from 'react';
+import {api,errorMessage} from '../api';
+export function ImportDialog({onClose,onImported}) {
+ const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[success,setSuccess]=useState(false);
+ async function submit(e){e.preventDefault();setBusy(true);setMessage('');setSuccess(false);const form=e.currentTarget;const file=form.elements.file.files[0];if(!file){setBusy(false);return}const data=new FormData();data.append('file',file);
+  try{const result=await api.post('/import',data,{auth:{username:'',password:form.elements.password.value}});setSuccess(true);setMessage(result.data.imported+' servicios importados. Los registros existentes se actualizaron.');form.elements.password.value='';await onImported()}catch(err){setMessage(errorMessage(err))}finally{setBusy(false)}
+ }
+ return <div className="modal-backdrop"><section role="dialog" aria-modal="true" aria-labelledby="import-title" className="modal"><h2 id="import-title">Importar servicios educativos</h2><p>Seleccione un libro XLSX. Se leerá su primera hoja y se validará el archivo completo antes de guardar los cambios.</p><a className="template-link" href={api.defaults.baseURL+'/import/template'} download>Descargar plantilla XLSX</a><p className="text-sm">Conserve los códigos como texto para mantener los ceros iniciales. Máximo 20 MB y 100 000 filas.</p><form onSubmit={submit}><label>Contraseña<input name="password" type="password" autoFocus required autoComplete="current-password"/></label><label>Archivo XLSX<input name="file" type="file" accept=".xlsx" required/></label>{message&&<p role="status" className={success?'success-message':'error-message'}>{message}</p>}<div className="flex justify-end gap-3 mt-5"><button type="button" disabled={busy} onClick={onClose} className="btn btn-secondary">Cerrar</button><button disabled={busy} className="btn btn-primary">{busy?'Importando…':'Importar'}</button></div></form></section></div>;
+}

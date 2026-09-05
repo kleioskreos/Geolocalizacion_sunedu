@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa de Escuelas — SIGMED</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; font-family:'Segoe UI',Tahoma,Arial,sans-serif; }
+
+  /* ---------- Header ---------- */
+  #header {
+    height:52px;
+    background:linear-gradient(90deg,#0b4f6c,#11698e);
+    color:#fff;
+    display:flex; align-items:center; padding:0 16px;
+    gap:12px;
+    box-shadow:0 2px 6px rgba(0,0,0,.3);
+    z-index:1001;
+    position:relative;
+  }
+  #header .logo-escale {
+    font-size:14px; font-weight:700; letter-spacing:1px;
+    white-space:nowrap;
+    display:flex; align-items:center; gap:8px;
+  }
+  #header .logo-escale .badge {
+    background:#fff; color:#0b4f6c; border-radius:4px;
+    padding:2px 8px; font-size:12px;
+  }
+  #header .logo-minedu {
+    margin-left:auto; font-size:11px; opacity:.9;
+    white-space:nowrap;
+  }
+  #header .tab {
+    background:rgba(255,255,255,.15);
+    padding:6px 14px; border-radius:6px 6px 0 0;
+    cursor:pointer; font-size:13px; font-weight:600;
+    transition:background .2s;
+  }
+  #header .tab:hover { background:rgba(255,255,255,.3); }
+  #header .tab.active { background:#fff; color:#0b4f6c; }
+  #header .updated { font-size:11px; opacity:.8; }
+
+  /* ---------- Layout ---------- */
+  #main { display:flex; height:calc(100% - 52px); }
+
+  /* ---------- Sidebar ---------- */
+  #sidebar {
+    width:340px; min-width:340px;
+    background:#f4f6f8;
+    overflow-y:auto;
+    border-right:1px solid #d0d5dd;
+    display:flex; flex-direction:column;
+  }
+  #sidebar.collapsed { margin-left:-340px; }
+  .sb-section {
+    padding:12px 14px;
+    border-bottom:1px solid #dfe3e8;
+  }
+  .sb-section h3 {
+    font-size:13px; color:#11698e;
+    margin-bottom:8px; text-transform:uppercase;
+    letter-spacing:.5px;
+    display:flex; align-items:center; gap:6px;
+    cursor:pointer;
+  }
+  .sb-section h3 .toggle-icon { font-size:10px; margin-left:auto; transition:transform .2s; }
+  .sb-section h3.collapsed .toggle-icon { transform:rotate(-90deg); }
+  .sb-section .content { overflow:hidden; }
+
+  .search-box {
+    width:100%; padding:7px 10px;
+    border:1px solid #ccc; border-radius:4px;
+    font-size:13px; outline:none;
+  }
+  .search-box:focus { border-color:#11698e; box-shadow:0 0 0 2px rgba(17,105,142,.15); }
+
+  select.search-box {
+    width:100%; margin-bottom:6px;
+    padding:6px 8px; cursor:pointer;
+    background:#fff;
+  }
+
+  .btn-row { display:flex; gap:6px; margin-top:8px; }
+  .btn {
+    flex:1; padding:7px 0;
+    border:none; border-radius:4px;
+    font-size:13px; font-weight:600;
+    cursor:pointer; transition:opacity .2s;
+  }
+  .btn-primary { background:#11698e; color:#fff; }
+  .btn-primary:hover { background:#0b4f6c; }
+  .btn-secondary { background:#e0e5eb; color:#444; }
+  .btn-secondary:hover { background:#d0d5dd; }
+
+  /* checkboxes de nivel */
+  .check-group { display:flex; flex-direction:column; gap:3px; }
+  .check-group label {
+    font-size:12px; cursor:pointer;
+    display:flex; align-items:center; gap:5px;
+    padding:2px 0;
+  }
+  .check-group label:hover { background:#e8edf2; border-radius:3px; padding-left:4px; }
+  .check-group input[type=checkbox] { cursor:pointer; }
+
+  .sub-group { margin-left:16px; }
+
+  /* legend */
+  .legend-item {
+    display:flex; align-items:center; gap:8px;
+    font-size:12px; padding:2px 0;
+  }
+  .legend-dot {
+    width:14px; height:14px; border-radius:50%;
+    border:2px solid #fff; box-shadow:0 0 2px rgba(0,0,0,.4);
+    flex-shrink:0;
+  }
+
+  /* ---------- Map ---------- */
+  #map {
+    flex:1;
+    height:100%;
+    position:relative;
+  }
+  /* Leaflet z-index fixes for header */
+  .leaflet-pane, .leaflet-top, .leaflet-bottom { z-index:400 !important; }
+  .leaflet-control { z-index:401 !important; }
+  .leaflet-popup-pane { z-index:450 !important; }
+
+  /* ---------- Floating map tools ---------- */
+  .leaflet-top.leaflet-right {
+    display:flex; flex-direction:column; gap:0;
+  }
+  .map-tool-btn {
+    width:36px; height:36px;
+    background:#fff;
+    display:flex !important; align-items:center; justify-content:center;
+    border:2px solid rgba(0,0,0,.2) !important;
+    border-radius:5px !important;
+    cursor:pointer;
+    font-size:16px;
+    margin-bottom:4px !important;
+  }
+  .map-tool-btn:hover { background:#f0f4f8; }
+  .map-tool-btn.active { background:#11698e; color:#fff; border-color:#0b4f6c !important; }
+  .map-tool-btn img { width:18px; height:18px; }
+
+  .coord-display {
+    position:absolute; bottom:6px; left:50%;
+    transform:translateX(-50%);
+    background:rgba(0,0,0,.7); color:#0f0;
+    padding:3px 10px; border-radius:4px;
+    font-family:'Consolas',monospace; font-size:12px;
+    z-index:500; pointer-events:none;
+    display:none;
+  }
+
+  /* ---------- Sidebar toggle ---------- */
+  #sidebar-toggle {
+    position:absolute; top:58px; left:340px;
+    z-index:1001;
+    background:#f4f6f8; border:1px solid #d0d5dd;
+    width:20px; height:48px;
+    cursor:pointer; font-size:12px;
+    display:flex; align-items:center; justify-content:center;
+    transition:left .2s;
+    border-radius:0 4px 4px 0;
+  }
+  #sidebar-toggle.collapsed { left:0; }
+
+  /* ---------- Results count ---------- */
+  #results-info {
+    position:absolute; top:10px; left:10px;
+    background:rgba(255,255,255,.95);
+    padding:6px 12px; border-radius:4px;
+    font-size:12px; z-index:500;
+    box-shadow:0 1px 5px rgba(0,0,0,.3);
+    display:none;
+  }
+
+  /* ---------- Popup ---------- */
+  .leaflet-popup-content {
+    font-size:13px; line-height:1.5;
+  }
+  .school-popup h4 { color:#0b4f6c; margin-bottom:4px; font-size:14px; }
+  .school-popup table { border-collapse:collapse; width:100%; }
+  .school-popup td { padding:2px 6px; vertical-align:top; }
+  .school-popup td:first-child { color:#666; font-size:12px; white-space:nowrap; width:100px; }
+  .school-popup td:last-child { font-weight:600; font-size:12px; }
+
+  /* loading */
+  #loading {
+    position:absolute; top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    background:rgba(255,255,255,.95);
+    padding:20px 30px; border-radius:8px;
+    z-index:600; font-size:14px;
+    box-shadow:0 2px 10px rgba(0,0,0,.3);
+    display:none;
+  }
+  #loading .spinner {
+    border:3px solid #f3f3f3;
+    border-top:3px solid #11698e;
+    border-radius:50%;
+    width:28px; height:28px;
+    animation:spin 1s linear infinite;
+    margin:0 auto 8px;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* responsive */
+  @media(max-width:768px) {
+    #sidebar { position:absolute; z-index:1000; height:calc(100% - 52px); }
+    #sidebar-toggle { left:340px; }
+    #header .logo-minedu, #header .updated { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="logo-escale">
+    <span class="badge">ESCALE</span>
+    <span>Mapa de Escuelas</span>
+  </div>
+  <div class="tab active">Servicios Educativos</div>
+  <div class="logo-minedu">MINEDU</div>
+  <div class="updated">Actualizado: 31-08-2026</div>
+</div>
+
+<div id="main">
+  <div id="sidebar">
+    <!-- Search by name -->
+    <div class="sb-section">
+      <h3 onclick="toggleSection(this)">Buscar<span class="toggle-icon">▼</span></h3>
+      <div class="content">
+        <input type="text" class="search-box" id="search-text"
+               placeholder="Nombre del servicio, código modular, código de institución ó código de local">
+      </div>
+    </div>
+
+    <!-- Political scope -->
+    <div class="sb-section">
+      <h3 onclick="toggleSection(this)">Ámbito político administrativo<span class="toggle-icon">▼</span></h3>
+      <div class="content">
+        <label style="font-size:12px;color:#666;">Departamento</label>
+        <select class="search-box" id="sel-depto" onchange="onDeptoChange()">
+          <option value="">Seleccionar...</option>
+        </select>
+        <label style="font-size:12px;color:#666;">Provincia</label>
+        <select class="search-box" id="sel-prov" onchange="onProvChange()" disabled>
+          <option value="">Seleccionar...</option>
+        </select>
+        <label style="font-size:12px;color:#666;">Distrito</label>
+        <select class="search-box" id="sel-dist" disabled>
+          <option value="">Seleccionar...</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Gestión Educativa -->
+    <div class="sb-section">
+      <h3 onclick="toggleSection(this)">Instancia de Gestión Educativa<span class="toggle-icon">▼</span></h3>
+      <div class="content">
+        <label style="font-size:12px;color:#666;">Dirección Regional de Educación</label>
+        <select class="search-box" id="sel-dre">
+          <option value="">Seleccionar...</option>
+        </select>
+        <label style="font-size:12px;color:#666;">Unidad de Gestión Educativa Local</label>
+        <select class="search-box" id="sel-ugel" disabled>
+          <option value="">Seleccionar...</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- More search options -->
+    <div class="sb-section">
+      <h3 onclick="toggleSection(this)">Más opciones de búsqueda<span class="toggle-icon">▼</span></h3>
+      <div class="content">
+        <input type="text" class="search-box" id="search-cpp" placeholder="Código ó nombre de Centro Poblado" style="margin-bottom:8px;">
+
+        <label style="font-size:12px;color:#666;font-weight:600;">Nivel / Modalidad</label>
+        <div class="check-group" style="margin:4px 0 8px;">
+          <label><input type="checkbox" class="nivel-cb" value="Inicial"> Inicial</label>
+          <label><input type="checkbox" class="nivel-cb" value="Primaria"> Primaria</label>
+          <label><input type="checkbox" class="nivel-cb" value="Secundaria"> Secundaria</label>
+          <label><input type="checkbox" class="nivel-cb" value="Superior Pedagógica"> Superior Pedagógica</label>
+          <label><input type="checkbox" class="nivel-cb" value="Superior Tecnológica"> Superior Tecnológica</label>
+          <label><input type="checkbox" class="nivel-cb" value="CETPRO"> CETPRO</label>
+          <label><input type="checkbox" class="nivel-cb" value="PRITE"> PRITE</label>
+          <label><input type="checkbox" class="nivel-cb" value="Inicial no escolarizado"> Inicial no escolarizado</label>
+        </div>
+
+        <label style="font-size:12px;color:#666;font-weight:600;">Gestión / Dependencia</label>
+        <select class="search-box" id="sel-gestion" style="margin-top:4px;">
+          <option value="">Seleccionar...</option>
+          <option value="Público - Sector Educación">Público - Sector Educación</option>
+          <option value="Público - Otro sector (FF.AA.)">Público - Otro sector (FF.AA.)</option>
+          <option value="Público - Municipalidad">Público - Municipalidad</option>
+          <option value="Público - Entidad en convenio">Público - Entidad en convenio</option>
+          <option value="Privado - Particular">Privado - Particular</option>
+          <option value="Privado - Cooperativo">Privado - Cooperativo</option>
+          <option value="Privado - Comunidad religiosa">Privado - Comunidad religiosa</option>
+          <option value="Privado - Empresa">Privado - Empresa</option>
+          <option value="Privado - Asociación civil">Privado - Asociación civil</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="sb-section">
+      <h3 onclick="toggleSection(this)">Leyenda<span class="toggle-icon">▼</span></h3>
+      <div class="content" id="legend-content">
+        <div class="legend-item"><div class="legend-dot" style="background:#2196F3"></div> Inicial</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#4CAF50"></div> Primaria</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#FF9800"></div> Secundaria</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#9C27B0"></div> Superior Pedagógica</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#E91E63"></div> Superior Tecnológica</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#795548"></div> CETPRO</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#00BCD4"></div> PRITE</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#607D8B"></div> Otros</div>
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="sb-section">
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="doSearch()">Buscar</button>
+        <button class="btn btn-secondary" onclick="clearAll()">Limpiar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="sidebar-toggle" onclick="toggleSidebar()">◀</div>
+
+  <div id="map">
+    <div id="results-info"></div>
+    <div id="loading">
+      <div class="spinner"></div>
+      <div>Buscando servicios educativos...</div>
+    </div>
+    <div class="coord-display" id="coord-display"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+// ============================================================
+//  DATA: 25 departamentos of Peru (from original SIGMED)
+// ============================================================
+const departamentos = [
+  {cod:"01",nombre:"AMAZONAS",lat:-5.07016997,lng:-78.05431301,zoom:9},
+  {cod:"02",nombre:"ANCASH",lat:-9.40704445,lng:-77.67006572,zoom:9},
+  {cod:"03",nombre:"APURIMAC",lat:-14.02813576,lng:-72.97537943,zoom:9},
+  {cod:"04",nombre:"AREQUIPA",lat:-15.8450092,lng:-72.47933253,zoom:9},
+  {cod:"05",nombre:"AYACUCHO",lat:-14.08858017,lng:-74.08367893,zoom:9},
+  {cod:"06",nombre:"CAJAMARCA",lat:-6.43154657,lng:-78.74505755,zoom:9},
+  {cod:"07",nombre:"CALLAO",lat:-11.94082041,lng:-77.12601499,zoom:9},
+  {cod:"08",nombre:"CUSCO",lat:-13.19150087,lng:-72.16797426,zoom:9},
+  {cod:"09",nombre:"HUANCAVELICA",lat:-13.02439906,lng:-75.00270873,zoom:9},
+  {cod:"10",nombre:"HUANUCO",lat:-9.41403051,lng:-76.02594904,zoom:9},
+  {cod:"11",nombre:"ICA",lat:-14.23394546,lng:-75.57373206,zoom:9},
+  {cod:"12",nombre:"JUNIN",lat:-11.53830789,lng:-74.88019196,zoom:9},
+  {cod:"13",nombre:"LA LIBERTAD",lat:-7.92167326,lng:-78.36801675,zoom:9},
+  {cod:"14",nombre:"LAMBAYEQUE",lat:-6.33611871,lng:-79.83036302,zoom:9},
+  {cod:"15",nombre:"LIMA",lat:-11.78562646,lng:-76.62720646,zoom:9},
+  {cod:"16",nombre:"LORETO",lat:-4.11977984,lng:-74.42635796,zoom:7},
+  {cod:"17",nombre:"MADRE DE DIOS",lat:-11.98085376,lng:-70.53468574,zoom:9},
+  {cod:"18",nombre:"MOQUEGUA",lat:-16.85981452,lng:-70.83839529,zoom:9},
+  {cod:"19",nombre:"PASCO",lat:-10.3987541,lng:-75.30201173,zoom:9},
+  {cod:"20",nombre:"PIURA",lat:-5.12384077,lng:-80.3374041,zoom:9},
+  {cod:"21",nombre:"PUNO",lat:-14.92913265,lng:-69.95068167,zoom:9},
+  {cod:"22",nombre:"SAN MARTIN",lat:-7.03408898,lng:-76.71503529,zoom:9},
+  {cod:"23",nombre:"TACNA",lat:-17.64500273,lng:-70.2775841,zoom:9},
+  {cod:"24",nombre:"TUMBES",lat:-3.85526527,lng:-80.54453701,zoom:10},
+  {cod:"25",nombre:"UCAYALI",lat:-9.61991844,lng:-73.43336197,zoom:8},
+];
+
+// Sample school data generator — generates realistic schools across Peru
+const niveles = [
+  {nombre:"Inicial", color:"#2196F3", gestion:"Público - Sector Educación"},
+  {nombre:"Primaria", color:"#4CAF50", gestion:"Público - Sector Educación"},
+  {nombre:"Secundaria", color:"#FF9800", gestion:"Público - Sector Educación"},
+  {nombre:"Superior Pedagógica", color:"#9C27B0", gestion:"Público - Sector Educación"},
+  {nombre:"Superior Tecnológica", color:"#E91E63", gestion:"Público - Sector Educación"},
+  {nombre:"CETPRO", color:"#795548", gestion:"Público - Sector Educación"},
+  {nombre:"PRITE", color:"#00BCD4", gestion:"Público - Sector Educación"},
+];
+
+function getColorForNivel(nivel) {
+  const n = niveles.find(x => x.nombre === nivel);
+  return n ? n.color : "#607D8B";
+}
+
+// Generate sample schools for each department
+function generateSchools() {
+  const schools = [];
+  let id = 1;
+  const provinciasPorDepto = {
+    "01":["BAGUA","BONGARA","CHACHAPOYAS","CONDORCANQUI","LUYA","RODRIGUEZ DE MENDOZA","UTCUBAMBA"],
+    "02":["AIJA","ANTONIO RAYMONDI","ASUNCION","BOLOGNESI","CARHUAS","CARLOS FERMIN FITZCARRALD","CASMA","CORONGO","HUARI","HUARMEY","HUAYLAS","MARISCAL LUZURIAGA","OCROS","PALLASCA","POMABAMBA","RECUAY","SANTA","SIHUAS","YUNGAY"],
+    "03":["ABANCAY","ANDAHUAYLAS","ANTABAMBA","AYMARAES","COTABAMBAS","CHINCHEROS","GRAU"],
+    "04":["AREQUIPA","CAMANA","CARAVELI","CASTILLA","CAYLOMA","CONDESUYOS","ISLAY","LA UNION"],
+    "05":["CANGALLO","HUAMANGA","HUANCA SANCOS","HUANTA","LA MAR","LUCANAS","PARINACOCHAS","PAUCAR DEL SARA SARA","SUCRE","VICTOR FAJARDO","VILCAS HUAMAN"],
+    "06":["CAJABAMBA","CAJAMARCA","CELENDIN","CHOTA","CONTUMAZA","CUTERVO","HUALGAYOC","JAEN","SAN IGNACIO","SAN MARCOS","SAN MIGUEL","SAN PABLO","SANTA CRUZ"],
+    "07":["CALLAO"],
+    "08":["ACOMAYO","ANTA","CALCA","CANAS","CANCHIS","CHUMBIVILCAS","CUSCO","ESPINAR","LA CONVENCION","PARURO","PAUCARTAMBO","QUISPICANCHI","URUBAMBA"],
+    "09":["ACOBAMBA","ANGARAES","CASTROVIRREYNA","CHURCAMPA","HUANCAVELICA","HUAYTARA","TAYACAJA"],
+    "10":["AMBO","HUANUCO","LA UNION","MARAÑON","PACHITEA","PUERTO INCA","HUACAYBAMBA","DOS DE MAYO","YAROWILCA","LEONCIO PRADO"],
+    "11":["ICA","CHINCHA","NASCA","PALPA","PISCO"],
+    "12":["CHANCHAMAYO","CHUPACA","CONCEPCION","HUANCAYO","JAUJA","JUNIN","SATIPO","TARMA","YALI","CHILCA"],
+    "13":["GRAN CHIMU","JULCAN","OTUZCO","PACASMAYO","PATAZ","SANCHEZ CARRION","SANTIAGO DE CHUCO","ASCOPES","VIRU","TRUJILLO","BOLIVAR","PALLASCA"],
+    "14":["CHICLAYO","FERREÑAFE","LAMBAYEQUE"],
+    "15":["BARRANCA","CAJATAMBO","CANTA","HUALGAYOC","HUARAL","HUAROCHIRI","HUaura","LIMA","OYON","YAUyos"],
+    "16":["MAYNAS","ALTO AMAZONAS","LORETO","MARISCAL RAMON CASTILLA","REQUENA","UCAYALI","DATEM DEL MARAÑON"],
+    "17":["TAMBOPATA","MANU","TAHUAMANU"],
+    "18":["MARISCAL NIETO","GENERAL SANCHEZ CERRO","ILO"],
+    "19":["PASCO","DANIEL ALCIDES CARRION","OXAPAMPA"],
+    "20":["PIURA","AYABACA","HUANCABAMBA","MORROPON","PAITA","SULLANA","TALARA","SECHURA"],
+    "21":["PUNO","AZANGARO","CARABAYA","CHUCUITO","EL COLLAO","HUANCANE","LAMPA","MELGAR","MOHO","SAN ANTONIO DE PUTINA","SANDIA","SAN ROMAN","YUNGUYO"],
+    "22":["MOYOBAMBA","BELLAVISTA","HUALLAGA","MARISCAL CACERES","PICOTA","RIOJA","SAN MARTIN","TOCACHE","LAMAS","EL DORADO","SAN PABLO"],
+    "23":["TACNA","CANDARAVE","JORGE BASADRE","TARATA"],
+    "24":["TUMBES","CONTRALMIRANTE VILLAR","SARUMILLA","ZARUMILLA"],
+    "25":["CORONEL PORTILLO","ATALAYA","PADRE ABAD","PURUS","AGUAYTIA"],
+  };
+
+  departamentos.forEach(depto => {
+    const provs = provinciasPorDepto[depto.cod] || ["CAPITAL"];
+    const schoolCount = 15 + Math.floor(Math.random() * 25);
+
+    for (let i = 0; i < schoolCount; i++) {
+      const nivel = niveles[Math.floor(Math.random() * niveles.length)];
+      const prov = provs[Math.floor(Math.random() * provs.length)];
+      // Random offset from department center (up to ~2 degrees)
+      const latOffset = (Math.random() - 0.5) * 3;
+      const lngOffset = (Math.random() - 0.5) * 3;
+      const isPriv = Math.random() < 0.2;
+      const gestion = isPriv
+        ? ["Privado - Particular","Privado - Comunidad religiosa","Privado - Asociación civil"][Math.floor(Math.random()*3)]
+        : "Público - Sector Educación";
+
+      schools.push({
+        id: id++,
+        codigo: String(100000 + id).padStart(6, "0"),
+        codigoModular: String(200000 + id).padStart(7, "0"),
+        nombre: `I.E. ${nivel.nombre === "Inicial" ? "N°" : nivel.nombre === "Primaria" ? "N°" : ""}${Math.floor(Math.random()*9000+1000)} ${prov}`,
+        nivel: nivel.nombre,
+        gestion: gestion,
+        departamento: depto.nombre,
+        provincia: prov,
+        distrito: `${prov} DISTRITO`,
+        dre: depto.nombre,
+        ugel: `${prov} - UGEL`,
+        centroPoblado: `CC.PP. ${Math.floor(Math.random()*900+100)}`,
+        lat: depto.lat + latOffset,
+        lng: depto.lng + lngOffset,
+      });
+    }
+  });
+  return schools;
+}
+
+const allSchools = generateSchools();
+let filteredSchools = [];
+
+// ============================================================
+//  MAP INITIALIZATION
+// ============================================================
+const map = L.map("map", {
+  center: [-9.19, -75.02],
+  zoom: 5,
+  zoomControl: false,
+  attributionControl: true,
+});
+
+// Base layers
+const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: '&copy; OpenStreetMap',
+  maxZoom: 19,
+});
+
+const esriSatLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+  attribution: '&copy; Esri',
+  maxZoom: 19,
+});
+
+const esriStreetsLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+  attribution: '&copy; Esri',
+  maxZoom: 19,
+});
+
+let currentBase = osmLayer;
+osmLayer.addTo(map);
+
+// Zoom control (left side, custom position)
+L.control.zoom({ position: "topleft" }).addTo(map);
+
+// Scale bar
+L.control.scale({ position: "bottomleft", imperial: false, metric: true }).addTo(map);
+
+// Attribution
+map.attributionControl.setPrefix("Leaflet | Powered by Esri, MED");
+
+// ============================================================
+//  LAYER CONTROL (base maps)
+// ============================================================
+L.control.layers(null, {
+  "Calles (OpenStreetMap)": osmLayer,
+  "Imagen Satelital (ESRI)": esriSatLayer,
+  "Calles (ESRI)": esriStreetsLayer,
+}, { position: "topright", collapsed: false }).addTo(map);
+
+// ============================================================
+//  MARKER CLUSTER GROUP
+// ============================================================
+const markerGroup = L.markerClusterGroup({
+  showCoverageOnHover: false,
+  maxClusterRadius: 50,
+  spiderfyOnMaxZoom: true,
+});
+map.addLayer(markerGroup);
+
+// Custom marker icon (colored circle)
+function createIcon(color) {
+  return L.divIcon({
+    className: "custom-marker",
+    html: `<div style="
+      width:18px;height:18px;
+      background:${color};
+      border:2px solid #fff;
+      border-radius:50%;
+      box-shadow:0 1px 4px rgba(0,0,0,.5);
+    "></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    popupAnchor: [0, -9],
+  });
+}
+
+// ============================================================
+//  POPUP CONTENT
+// ============================================================
+function createPopup(s) {
+  return `
+    <div class="school-popup">
+      <h4>${s.nombre}</h4>
+      <table>
+        <tr><td>Código Modular:</td><td>${s.codigoModular}</td></tr>
+        <tr><td>Nivel / Modalidad:</td><td>${s.nivel}</td></tr>
+        <tr><td>Gestión:</td><td>${s.gestion}</td></tr>
+        <tr><td>Departamento:</td><td>${s.departamento}</td></tr>
+        <tr><td>Provincia:</td><td>${s.provincia}</td></tr>
+        <tr><td>Distrito:</td><td>${s.distrito}</td></tr>
+        <tr><td>DRE:</td><td>${s.dre}</td></tr>
+        <tr><td>UGEL:</td><td>${s.ugel}</td></tr>
+        <tr><td>Centro Poblado:</td><td>${s.centroPoblado}</td></tr>
+        <tr><td>Latitud:</td><td>${s.lat.toFixed(6)}</td></tr>
+        <tr><td>Longitud:</td><td>${s.lng.toFixed(6)}</td></tr>
+      </table>
+    </div>`;
+}
+
+// ============================================================
+//  RENDER MARKERS
+// ============================================================
+function renderMarkers(schools) {
+  markerGroup.clearLayers();
+  schools.forEach(s => {
+    const marker = L.marker([s.lat, s.lng], { icon: createIcon(getColorForNivel(s.nivel)) });
+    marker.bindPopup(createPopup(s));
+    markerGroup.addLayer(marker);
+  });
+}
+
+// ============================================================
+//  POPULATE DROPDOWNS
+// ============================================================
+function populateDepartamentos() {
+  const sel = document.getElementById("sel-depto");
+  departamentos.forEach(d => {
+    const opt = document.createElement("option");
+    opt.value = d.cod;
+    opt.textContent = `${d.cod}. ${d.nombre}`;
+    sel.appendChild(opt);
+  });
+  // Also populate DRE dropdown (same data)
+  const dre = document.getElementById("sel-dre");
+  departamentos.forEach(d => {
+    const opt = document.createElement("option");
+    opt.value = d.cod;
+    opt.textContent = `${d.cod}. ${d.nombre}`;
+    dre.appendChild(opt);
+  });
+}
+populateDepartamentos();
+
+// Provincia data (simplified — same province lists as above)
+const provinciasData = {
+  "01":["BAGUA","BONGARA","CHACHAPOYAS","CONDORCANQUI","LUYA","RODRIGUEZ DE MENDOZA","UTCUBAMBA"],
+  "02":["AIJA","ANTONIO RAYMONDI","ASUNCION","BOLOGNESI","CARHUAS","CARLOS FERMIN FITZCARRALD","CASMA","CORONGO","HUARI","HUARMEY","HUAYLAS","MARISCAL LUZURIAGA","OCROS","PALLASCA","POMABAMBA","RECUAY","SANTA","SIHUAS","YUNGAY"],
+  "03":["ABANCAY","ANDAHUAYLAS","ANTABAMBA","AYMARAES","COTABAMBAS","CHINCHEROS","GRAU"],
+  "04":["AREQUIPA","CAMANA","CARAVELI","CASTILLA","CAYLOMA","CONDESUYOS","ISLAY","LA UNION"],
+  "05":["CANGALLO","HUAMANGA","HUANCA SANCOS","HUANTA","LA MAR","LUCANAS","PARINACOCHAS","PAUCAR DEL SARA SARA","SUCRE","VICTOR FAJARDO","VILCAS HUAMAN"],
+  "06":["CAJABAMBA","CAJAMARCA","CELENDIN","CHOTA","CONTUMAZA","CUTERVO","HUALGAYOC","JAEN","SAN IGNACIO","SAN MARCOS","SAN MIGUEL","SAN PABLO","SANTA CRUZ"],
+  "07":["CALLAO"],
+  "08":["ACOMAYO","ANTA","CALCA","CANAS","CANCHIS","CHUMBIVILCAS","CUSCO","ESPINAR","LA CONVENCION","PARURO","PAUCARTAMBO","QUISPICANCHI","URUBAMBA"],
+  "09":["ACOBAMBA","ANGARAES","CASTROVIRREYNA","CHURCAMPA","HUANCAVELICA","HUAYTARA","TAYACAJA"],
+  "10":["AMBO","HUANUCO","LA UNION","MARAÑON","PACHITEA","PUERTO INCA","HUACAYBAMBA","DOS DE MAYO","YAROWILCA","LEONCIO PRADO"],
+  "11":["ICA","CHINCHA","NASCA","PALPA","PISCO"],
+  "12":["CHANCHAMAYO","CHUPACA","CONCEPCION","HUANCAYO","JAUJA","JUNIN","SATIPO","TARMA","YALI","CHILCA"],
+  "13":["GRAN CHIMU","JULCAN","OTUZCO","PACASMAYO","PATAZ","SANCHEZ CARRION","SANTIAGO DE CHUCO","ASCOPES","VIRU","TRUJILLO","BOLIVAR","PALLASCA"],
+  "14":["CHICLAYO","FERREÑAFE","LAMBAYEQUE"],
+  "15":["BARRANCA","CAJATAMBO","CANTA","HUARAL","HUAROCHIRI","HUAURA","LIMA","OYON","YAUYOS","HUAROCHIRI","CAJATAMBO"],
+  "16":["MAYNAS","ALTO AMAZONAS","LORETO","MARISCAL RAMON CASTILLA","REQUENA","UCAYALI","DATEM DEL MARAÑON"],
+  "17":["TAMBOPATA","MANU","TAHUAMANU"],
+  "18":["MARISCAL NIETO","GENERAL SANCHEZ CERRO","ILO"],
+  "19":["PASCO","DANIEL ALCIDES CARRION","OXAPAMPA"],
+  "20":["PIURA","AYABACA","HUANCABAMBA","MORROPON","PAITA","SULLANA","TALARA","SECHURA"],
+  "21":["PUNO","AZANGARO","CARABAYA","CHUCUITO","EL COLLAO","HUANCANE","LAMPA","MELGAR","MOHO","SAN ANTONIO DE PUTINA","SANDIA","SAN ROMAN","YUNGUYO"],
+  "22":["MOYOBAMBA","BELLAVISTA","HUALLAGA","MARISCAL CACERES","PICOTA","RIOJA","SAN MARTIN","TOCACHE","LAMAS","EL DORADO","SAN PABLO"],
+  "23":["TACNA","CANDARAVE","JORGE BASADRE","TARATA"],
+  "24":["TUMBES","CONTRALMIRANTE VILLAR","SARUMILLA","ZARUMILLA"],
+  "25":["CORONEL PORTILLO","ATALAYA","PADRE ABAD","PURUS","AGUAYTIA"],
+};
+
+function onDeptoChange() {
+  const cod = document.getElementById("sel-depto").value;
+  const provSel = document.getElementById("sel-prov");
+  const distSel = document.getElementById("sel-dist");
+  provSel.innerHTML = '<option value="">Seleccionar...</option>';
+  distSel.innerHTML = '<option value="">Seleccionar...</option>';
+
+  if (cod && provinciasData[cod]) {
+    provinciasData[cod].forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p; opt.textContent = p;
+      provSel.appendChild(opt);
+    });
+    provSel.disabled = false;
+  } else {
+    provSel.disabled = true;
+  }
+  distSel.disabled = true;
+
+  // Fly to department
+  if (cod) {
+    const d = departamentos.find(x => x.cod === cod);
+    if (d) map.flyTo([d.lat, d.lng], d.zoom || 9, { duration: 1.5 });
+  }
+}
+
+function onProvChange() {
+  const distSel = document.getElementById("sel-dist");
+  distSel.innerHTML = '<option value="">Seleccionar...</option>';
+  // Enable distrito (in a real app this would be loaded from an API)
+  distSel.disabled = false;
+  // Add a dummy distrito for now
+  const provVal = document.getElementById("sel-prov").value;
+  if (provVal) {
+    for (let i = 1; i <= 5; i++) {
+      const opt = document.createElement("option");
+      opt.value = `${provVal} D${i}`;
+      opt.textContent = `${provVal} DISTRITO ${i}`;
+      distSel.appendChild(opt);
+    }
+  }
+}
+
+// DRE → UGEL
+document.getElementById("sel-dre").addEventListener("change", function() {
+  const cod = this.value;
+  const ugelSel = document.getElementById("sel-ugel");
+  ugelSel.innerHTML = '<option value="">Seleccionar...</option>';
+  if (cod && provinciasData[cod]) {
+    provinciasData[cod].forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = `${p}-UGEL`;
+      opt.textContent = `${p} - UGEL`;
+      ugelSel.appendChild(opt);
+    });
+    ugelSel.disabled = false;
+  } else {
+    ugelSel.disabled = true;
+  }
+});
+
+// ============================================================
+//  SEARCH
+// ============================================================
+function doSearch() {
+  document.getElementById("loading").style.display = "block";
+
+  setTimeout(() => {
+    const searchText = document.getElementById("search-text").value.trim().toUpperCase();
+    const depto = document.getElementById("sel-depto").value;
+    const prov = document.getElementById("sel-prov").value;
+    const dist = document.getElementById("sel-dist").value;
+    const dre = document.getElementById("sel-dre").value;
+    const ugel = document.getElementById("sel-ugel").value;
+    const cpp = document.getElementById("search-cpp").value.trim().toUpperCase();
+    const gestion = document.getElementById("sel-gestion").value;
+
+    const selectedNiveles = Array.from(document.querySelectorAll(".nivel-cb:checked")).map(cb => cb.value);
+
+    filteredSchools = allSchools.filter(s => {
+      if (searchText) {
+        const hay = (s.nombre + " " + s.codigo + " " + s.codigoModular).toUpperCase();
+        if (!hay.includes(searchText)) return false;
+      }
+      if (depto) {
+        const d = departamentos.find(x => x.cod === depto);
+        if (s.departamento !== d.nombre) return false;
+      }
+      if (prov && s.provincia !== prov) return false;
+      if (dist && !s.distrito.includes(dist)) return false;
+      if (dre) {
+        const d = departamentos.find(x => x.cod === dre);
+        if (s.dre !== d.nombre) return false;
+      }
+      if (ugel && s.ugel !== ugel) return false;
+      if (cpp && !s.centroPoblado.toUpperCase().includes(cpp)) return false;
+      if (gestion && s.gestion !== gestion) return false;
+      if (selectedNiveles.length > 0 && !selectedNiveles.includes(s.nivel)) return false;
+      return true;
+    });
+
+    renderMarkers(filteredSchools);
+
+    // Show results info
+    const info = document.getElementById("results-info");
+    info.textContent = `${filteredSchools.length} servicio(s) encontrado(s)`;
+    info.style.display = "block";
+
+    // Fit bounds
+    if (filteredSchools.length > 0 && filteredSchools.length < 500) {
+      const group = L.featureGroup(markerGroup.getLayers());
+      map.fitBounds(group.getBounds(), { padding: [40, 40] });
+    }
+
+    document.getElementById("loading").style.display = "none";
+  }, 400);
+}
+
+function clearAll() {
+  document.getElementById("search-text").value = "";
+  document.getElementById("search-cpp").value = "";
+  document.getElementById("sel-depto").value = "";
+  document.getElementById("sel-prov").innerHTML = '<option value="">Seleccionar...</option>';
+  document.getElementById("sel-prov").disabled = true;
+  document.getElementById("sel-dist").innerHTML = '<option value="">Seleccionar...</option>';
+  document.getElementById("sel-dist").disabled = true;
+  document.getElementById("sel-dre").value = "";
+  document.getElementById("sel-ugel").innerHTML = '<option value="">Seleccionar...</option>';
+  document.getElementById("sel-ugel").disabled = true;
+  document.getElementById("sel-gestion").value = "";
+  document.querySelectorAll(".nivel-cb").forEach(cb => cb.checked = false);
+
+  markerGroup.clearLayers();
+  filteredSchools = [];
+  document.getElementById("results-info").style.display = "none";
+  map.flyTo([-9.19, -75.02], 5, { duration: 1.5 });
+}
+
+// ============================================================
+//  SIDEBAR TOGGLE
+// ============================================================
+function toggleSidebar() {
+  const sb = document.getElementById("sidebar");
+  const toggle = document.getElementById("sidebar-toggle");
+  sb.classList.toggle("collapsed");
+  toggle.classList.toggle("collapsed");
+  toggle.textContent = sb.classList.contains("collapsed") ? "▶" : "◀";
+  setTimeout(() => map.invalidateSize(), 250);
+}
+
+function toggleSection(header) {
+  header.classList.toggle("collapsed");
+  const content = header.nextElementSibling;
+  content.style.display = header.classList.contains("collapsed") ? "none" : "block";
+}
+
+// ============================================================
+//  MAP TOOLS: Coordinate picker, Distance, Area, Identify, Erase
+// ============================================================
+let activeTool = null;
+let drawnItems = new L.FeatureGroup();
+map.addLayer(drawnItems);
+
+// Coordinate picker
+let coordMarker = null;
+let coordHandler = null;
+
+function setTool(tool) {
+  // Remove active state from all buttons
+  document.querySelectorAll(".map-tool-btn").forEach(b => b.classList.remove("active"));
+  // Cancel any active draw handlers
+  if (coordHandler) { map.off("click", coordHandler); coordHandler = null; }
+
+  if (activeTool === tool) {
+    activeTool = null;
+    document.getElementById("coord-display").style.display = "none";
+    return;
+  }
+
+  activeTool = tool;
+  const btn = document.querySelector(`.map-tool-btn[data-tool="${tool}"]`);
+  if (btn) btn.classList.add("active");
+
+  if (tool === "coord") {
+    document.getElementById("coord-display").style.display = "block";
+    coordHandler = function(e) {
+      if (coordMarker) map.removeLayer(coordMarker);
+      coordMarker = L.marker(e.latlng, {
+        icon: L.divIcon({
+          className: "coord-marker-icon",
+          html: '<div style="font-size:18px;">📍</div>',
+          iconSize: [24, 24],
+          iconAnchor: [12, 24],
+        })
+      }).addTo(map);
+      coordMarker.bindPopup(`
+        <div style="font-family:Consolas,monospace;font-size:13px;">
+          <b>Coordenadas:</b><br>
+          Lat: ${e.latlng.lat.toFixed(6)}<br>
+          Lng: ${e.latlng.lng.toFixed(6)}
+        </div>`).openPopup();
+    };
+    map.on("click", coordHandler);
+  }
+}
+
+// Create custom map tool buttons
+const toolContainer = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-custom", map);
+toolContainer.style.position = "absolute";
+toolContainer.style.top = "10px";
+toolContainer.style.right = "10px";
+toolContainer.style.zIndex = "500";
+toolContainer.style.display = "flex";
+toolContainer.style.flexDirection = "column";
+toolContainer.style.gap = "4px";
+
+const tools = [
+  { id: "coord", title: "Obtener las coordenadas de un punto", icon: "📍" },
+  { id: "distance", title: "Calcular la distancia entre dos o más puntos", icon: "📏" },
+  { id: "area", title: "Calcular el área de una superficie", icon: "📐" },
+  { id: "identify", title: "Ver información de la capa", icon: "ℹ️" },
+  { id: "erase", title: "Borrar los elementos agregados", icon: "🗑️" },
+];
+
+tools.forEach(t => {
+  const btn = document.createElement("div");
+  btn.className = "map-tool-btn";
+  btn.setAttribute("data-tool", t.id);
+  btn.title = t.title;
+  btn.style.background = "#fff";
+  btn.style.width = "36px";
+  btn.style.height = "36px";
+  btn.style.display = "flex";
+  btn.style.alignItems = "center";
+  btn.style.justifyContent = "center";
+  btn.style.border = "2px solid rgba(0,0,0,.2)";
+  btn.style.borderRadius = "5px";
+  btn.style.cursor = "pointer";
+  btn.style.fontSize = "16px";
+  btn.textContent = t.icon;
+  btn.onclick = function() {
+    if (t.id === "distance") {
+      setTool("distance");
+      startPolylineMeasure();
+    } else if (t.id === "area") {
+      setTool("area");
+      startPolygonMeasure();
+    } else if (t.id === "erase") {
+      drawnItems.clearLayers();
+      if (coordMarker) { map.removeLayer(coordMarker); coordMarker = null; }
+      setTool(null);
+      document.getElementById("coord-display").style.display = "none";
+    } else if (t.id === "identify") {
+      alert("Haga clic en un marcador de escuela para ver su información detallada.");
+    } else {
+      setTool(t.id);
+    }
+  };
+  toolContainer.appendChild(btn);
+});
+
+// Mouse coordinate display for "coord" tool
+map.on("mousemove", function(e) {
+  if (activeTool === "coord") {
+    document.getElementById("coord-display").textContent =
+      `y,x: ${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`;
+  }
+});
+
+// Distance measurement (polyline)
+let measurePoints = [];
+let measureLine = null;
+let measureMarkers = [];
+
+function startPolylineMeasure() {
+  // Clear previous
+  if (measureLine) { drawnItems.removeLayer(measureLine); measureLine = null; }
+  measureMarkers.forEach(m => drawnItems.removeLayer(m));
+  measureMarkers = [];
+  measurePoints = [];
+
+  const clickHandler = function(e) {
+    measurePoints.push(e.latlng);
+
+    const m = L.marker(e.latlng, {
+      icon: L.divIcon({
+        className: "measure-point",
+        html: '<div style="width:8px;height:8px;background:#11698e;border:2px solid #fff;border-radius:50%;"></div>',
+        iconSize: [8, 8], iconAnchor: [4, 4],
+      })
+    }).addTo(drawnItems);
+    measureMarkers.push(m);
+
+    if (measurePoints.length >= 2) {
+      if (measureLine) drawnItems.removeLayer(measureLine);
+      measureLine = L.polyline(measurePoints, { color: "#11698e", weight: 3, dashArray: "5,8" }).addTo(drawnItems);
+
+      // Calculate total distance
+      let total = 0;
+      for (let i = 1; i < measurePoints.length; i++) {
+        total += map.distance(measurePoints[i-1], measurePoints[i]);
+      }
+
+      // Show popup on last point
+      m.bindPopup(`<b>Distancia total:</b><br>${total > 1000 ? (total/1000).toFixed(2) + " km" : total.toFixed(1) + " m"}`).openPopup();
+    }
+  };
+
+  const dblClickHandler = function() {
+    map.off("click", clickHandler);
+    map.off("dblclick", dblClickHandler);
+    map.doubleClickZoom.enable();
+  };
+
+  map.doubleClickZoom.disable();
+  map.on("click", clickHandler);
+  map.on("dblclick", dblClickHandler);
+}
+
+// Area measurement (polygon)
+function startPolygonMeasure() {
+  let polyPoints = [];
+  let polyLine = null;
+  let polyMarkers = [];
+
+  const clickHandler = function(e) {
+    polyPoints.push(e.latlng);
+
+    const m = L.marker(e.latlng, {
+      icon: L.divIcon({
+        className: "measure-point",
+        html: '<div style="width:8px;height:8px;background:#e91e63;border:2px solid #fff;border-radius:50%;"></div>',
+        iconSize: [8, 8], iconAnchor: [4, 4],
+      })
+    }).addTo(drawnItems);
+    polyMarkers.push(m);
+
+    if (polyPoints.length >= 2) {
+      if (polyLine) drawnItems.removeLayer(polyLine);
+      polyLine = L.polygon(polyPoints, { color: "#e91e63", weight: 2, fillColor: "#e91e63", fillOpacity: 0.15 }).addTo(drawnItems);
+    }
+  };
+
+  const dblClickHandler = function() {
+    map.off("click", clickHandler);
+    map.off("dblclick", dblClickHandler);
+    map.doubleClickZoom.enable();
+
+    if (polyPoints.length >= 3 && polyLine) {
+      const area = L.GeometryUtil ? 0 : 0;
+      // Simple shoelace formula for area
+      let a = 0;
+      const p = polyPoints;
+      for (let i = 0; i < p.length; i++) {
+        const j = (i + 1) % p.length;
+        a += p[i].lng * p[j].lat - p[j].lng * p[i].lat;
+      }
+      a = Math.abs(a) / 2;
+      // Convert to square meters (approximate using lat/lng to meters)
+      const areaM2 = a * 111320 * 111320 * Math.cos(polyPoints[0].lat * Math.PI / 180);
+      const lastMarker = polyMarkers[polyMarkers.length - 1];
+      lastMarker.bindPopup(`<b>Área aproximada:</b><br>${areaM2 > 1000000 ? (areaM2/1000000).toFixed(2) + " km²" : areaM2.toFixed(0) + " m²"}`).openPopup();
+    }
+  };
+
+  map.doubleClickZoom.disable();
+  map.on("click", clickHandler);
+  map.on("dblclick", dblClickHandler);
+}
+
+// ============================================================
+//  EXPORT TO CSV (Excel)
+// ============================================================
+// Add export button at bottom right
+const exportContainer = L.DomUtil.create("div", "leaflet-control", map);
+exportContainer.style.position = "absolute";
+exportContainer.style.bottom = "30px";
+exportContainer.style.right = "10px";
+exportContainer.style.zIndex = "500";
+
+const exportBtn = document.createElement("div");
+exportBtn.style.background = "#fff";
+exportBtn.style.padding = "6px 12px";
+exportBtn.style.borderRadius = "4px";
+exportBtn.style.cursor = "pointer";
+exportBtn.style.fontSize = "13px";
+exportBtn.style.boxShadow = "0 1px 5px rgba(0,0,0,.3)";
+exportBtn.style.display = "flex";
+exportBtn.style.alignItems = "center";
+exportBtn.style.gap = "6px";
+exportBtn.title = "Exportar a Excel";
+exportBtn.innerHTML = "<span>📊</span> <span>Exportar</span>";
+exportBtn.onclick = function() {
+  const data = filteredSchools.length > 0 ? filteredSchools : allSchools;
+  const headers = ["Código","Código Modular","Nombre","Nivel/Modalidad","Gestión","Departamento","Provincia","Distrito","DRE","UGEL","Centro Poblado","Latitud","Longitud"];
+  const rows = data.map(s => [
+    s.codigo, s.codigoModular, s.nombre, s.nivel, s.gestion,
+    s.departamento, s.provincia, s.distrito, s.dre, s.ugel,
+    s.centroPoblado, s.lat.toFixed(6), s.lng.toFixed(6)
+  ]);
+
+  let csv = headers.join(",") + "\n";
+  rows.forEach(r => {
+    csv += r.map(v => `"${v}"`).join(",") + "\n";
+  });
+
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "escuelas_export.csv";
+  link.click();
+};
+exportContainer.appendChild(exportBtn);
+
+// ============================================================
+//  INITIAL RENDER — show all schools
+// ============================================================
+filteredSchools = allSchools;
+renderMarkers(allSchools);
+document.getElementById("results-info").textContent = `${allSchools.length} servicios educativos`;
+document.getElementById("results-info").style.display = "block";
+
+// Mouse coordinates display (always on, subtle)
+map.on("mousemove", function(e) {
+  if (activeTool !== "coord") {
+    // subtle coordinate tracking is off unless tool active
+  }
+});
+
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+import { useMemo, useState } from 'react';
+import { departamentos, getColorForNivel } from '../data/sigmedData';
+const emptyFilters = {searchText:'',depto:'',prov:'',dist:'',dre:'',ugel:'',cpp:'',selectedNiveles:[],gestion:''};
+const unique = (rows,key) => [...new Set(rows.map(s=>s[key]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+export function Sidebar({ schools, onSearch, onClear, onDeptoSelect, collapsed, onToggle, loading, onImport }) {
+ const [filters,setFilters]=useState(emptyFilters);
+ const set=(key,value)=>setFilters(f=>({...f,[key]:value,...(key==='depto'?{prov:'',dist:''}:{}),...(key==='prov'?{dist:''}:{}),...(key==='dre'?{ugel:''}:{})}));
+ const options=useMemo(()=>{
+  const department=departamentos.find(d=>d.cod===filters.depto)?.nombre;
+  const dre=departamentos.find(d=>d.cod===filters.dre)?.nombre;
+  return {provinces:unique(schools.filter(s=>s.departamento===department),'provincia'),districts:unique(schools.filter(s=>s.departamento===department&&s.provincia===filters.prov),'distrito'),ugels:unique(schools.filter(s=>s.departamento===dre),'dreUgel'),levels:unique(schools,'nivel'),management:unique(schools,'gestion')};
+ },[schools,filters.depto,filters.prov,filters.dre]);
+ const select=(key,label,values,disabled=false)=><label className="filter-field"><span>{label}</span><select aria-label={label} value={filters[key]} disabled={disabled} onChange={e=>set(key,e.target.value)}><option value="">Seleccionar...</option>{values.map(v=><option key={v} value={v}>{v}</option>)}</select></label>;
+ const deptSelect=(key,label)=><label className="filter-field"><span>{label}</span><select aria-label={label} value={filters[key]} onChange={e=>{set(key,e.target.value);if(key==='depto'){const d=departamentos.find(d=>d.cod===e.target.value);if(d)onDeptoSelect(d)}}}><option value="">Seleccionar...</option>{departamentos.map(d=><option key={d.cod} value={d.cod}>{d.cod}. {d.nombre}</option>)}</select></label>;
+ return <><aside className={'sidebar '+(collapsed?'collapsed':'')} aria-label="Filtros de búsqueda"><form onSubmit={e=>{e.preventDefault();onSearch(filters)}}>
+  <details open className="sb-section"><summary>Buscar <span>⌕</span></summary><input className="search-box" aria-label="Nombre o código del servicio" value={filters.searchText} onChange={e=>set('searchText',e.target.value)}/><p className="search-help">Nombre del servicio, código modular,<br/> código de institución ó código de local</p></details>
+  <details open className="sb-section"><summary>Ámbito político administrativo</summary>{deptSelect('depto','Departamento:')}{select('prov','Provincia:',options.provinces,!filters.depto)}{select('dist','Distrito:',options.districts,!filters.prov)}</details>
+  <details className="sb-section"><summary>Instancia de Gestión Educativa</summary>{deptSelect('dre','Dirección Regional de Educación')}{select('ugel','Unidad de Gestión Educativa Local',options.ugels,!filters.dre)}</details>
+  <details className="sb-section"><summary>Más opciones de búsqueda</summary><label className="block text-sm mt-3">Código o nombre de Centro Poblado<input aria-label="Centro poblado" className="search-box" value={filters.cpp} onChange={e=>set('cpp',e.target.value)}/></label><p className="group-label">Nivel / Modalidad</p><div className="check-group">{options.levels.map(n=><label className="check-label" key={n}><input type="checkbox" checked={filters.selectedNiveles.includes(n)} onChange={()=>set('selectedNiveles',filters.selectedNiveles.includes(n)?filters.selectedNiveles.filter(x=>x!==n):[...filters.selectedNiveles,n])}/>{n}</label>)}</div>{select('gestion','Gestión / Dependencia',options.management)}</details>
+  <details className="sb-section"><summary>Leyenda</summary><div className="legend-list">{options.levels.map(n=><div className="legend-item" key={n}><i className="legend-dot" style={{background:getColorForNivel(n)}}/>{n}</div>)}</div></details>
+  <div className="btn-row"><button disabled={loading} className="btn btn-primary" type="submit">Buscar</button><button className="btn btn-secondary" type="button" onClick={()=>{setFilters(emptyFilters);onClear()}}>Limpiar</button></div>
+ </form><div className="sidebar-actions"><button className="import-action" onClick={onImport}>Importar XLSX</button></div><p className="data-note">Padrón local · {schools.length.toLocaleString('es-PE')} servicios<br/>Cobertura según los archivos importados.</p></aside><button aria-label={collapsed?'Mostrar filtros':'Ocultar filtros'} aria-expanded={!collapsed} className={'sidebar-toggle '+(collapsed?'collapsed':'')} onClick={onToggle}>{collapsed?'›':'‹'}</button></>;
+}
