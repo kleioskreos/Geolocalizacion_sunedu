@@ -1,4 +1,7 @@
 const PAGE_SIZE = 32;
+const PDF_RENDER_SCALE = 2;
+const PAGE_WIDTH = 1800;
+const PAGE_HEIGHT = 1080;
 
 const truncate = (value, length) => {
   const text = String(value || "Sin nombre").trim();
@@ -91,7 +94,7 @@ export async function captureStreetMap(schools) {
 
   const host = document.createElement("div");
   host.setAttribute("aria-hidden", "true");
-  Object.assign(host.style, { position: "fixed", left: "-10000px", top: "0", width: "1230px", height: "805px", overflow: "hidden", zIndex: "-1" });
+  Object.assign(host.style, { position: "fixed", left: "-10000px", top: "0", width: `${1230 * PDF_RENDER_SCALE}px`, height: `${805 * PDF_RENDER_SCALE}px`, overflow: "hidden", zIndex: "-1" });
   document.body.append(host);
   let map;
   try {
@@ -105,14 +108,14 @@ export async function captureStreetMap(schools) {
     map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15, animate: false });
     await waitForTiles(streets);
     await new Promise((resolve) => window.requestAnimationFrame(resolve));
-    const image = await html2canvas(host, { backgroundColor: "#f8fafc", logging: false, useCORS: true });
+    const image = await html2canvas(host, { backgroundColor: "#f8fafc", logging: false, scale: 1, useCORS: true });
     const zoom = map.getZoom();
     const origin = map.getPixelOrigin();
     return {
       image,
       project: (school) => {
         const point = mercatorPoint(school.lat, school.lng, zoom);
-        return { x: point.x - origin.x, y: point.y - origin.y };
+        return { x: (point.x - origin.x) / PDF_RENDER_SCALE, y: (point.y - origin.y) / PDF_RENDER_SCALE };
       },
     };
   } catch {
@@ -144,17 +147,18 @@ function drawScale(ctx, bounds, area) {
 
 export function renderOfflineMapPage(allSchools, pageSchools, pageNumber, totalPages, streetMap) {
   const canvas = document.createElement("canvas");
-  canvas.width = 1800;
-  canvas.height = 1080;
+  canvas.width = PAGE_WIDTH * PDF_RENDER_SCALE;
+  canvas.height = PAGE_HEIGHT * PDF_RENDER_SCALE;
   const ctx = canvas.getContext("2d");
+  ctx.scale(PDF_RENDER_SCALE, PDF_RENDER_SCALE);
   const bounds = mapBounds(allSchools, 1.53);
   const area = { x: 70, y: 165, width: 1230, height: 805 };
   const indexes = new Map(allSchools.map((school, index) => [school, index + 1]));
 
   ctx.fillStyle = "#f8fafc";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
   ctx.fillStyle = "#163f63";
-  ctx.fillRect(0, 0, canvas.width, 128);
+  ctx.fillRect(0, 0, PAGE_WIDTH, 128);
   ctx.fillStyle = "#ffffff";
   ctx.font = "700 38px Georgia";
   ctx.fillText("Mapa de ubicación de servicios educativos", 70, 57);
