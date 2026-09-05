@@ -59,6 +59,10 @@ export function useLeafletMap(mapContainerRef, { schools, onMapReady }) {
     const map = L.map(mapContainerRef.current, {
       center: [-9.2, -75.0],
       zoom: 6,
+      // En varias zonas del padrón el satélite de Esri deja de publicar
+      // mosaicos al pasar este nivel y muestra "Map data not yet available".
+      // Se limita el mapa para conservar siempre un fondo utilizable.
+      maxZoom: 17,
       zoomControl: false,
       attributionControl: true,
     });
@@ -67,15 +71,15 @@ export function useLeafletMap(mapContainerRef, { schools, onMapReady }) {
     // Base layers
     const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "&copy; OpenStreetMap",
-      maxZoom: 19,
+      maxZoom: 17,
     });
     const esriSatLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
       attribution: "&copy; Esri",
-      maxZoom: 19,
+      maxZoom: 17,
     });
     const esriStreetsLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
       attribution: "&copy; Esri",
-      maxZoom: 19,
+      maxZoom: 17,
     });
 
     baseLayersRef.current = {
