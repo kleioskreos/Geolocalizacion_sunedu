@@ -143,10 +143,10 @@ La importación no solicita usuario. El servidor valida la contraseña con bcryp
 1. Suba los archivos modificados a la rama que Dokploy utiliza.
 2. Configure la ruta Compose como `./compose.prod.yaml`.
 3. En Environment, pegue las variables de `.env.prod` (archivo privado) o complete `.env.prod.example`. Dokploy no lee automáticamente un archivo llamado `.env.prod`; sus variables deben estar en Environment. En terminal sí se utiliza `--env-file .env.prod`.
-4. En Domains agregue `mapa.vmbperu.com` para el servicio `web`, puerto 8090, y `mapabackend.vmbperu.com` para `api`, puerto 8091. Use ruta `/` y HTTPS. No añada `/api` al dominio base: el frontend lo incorpora al compilar.
+4. `compose.prod.yaml` configura las rutas Traefik y HTTPS directamente. Verifique que los registros A de `mapa.vmbperu.com` y `mapabackend.vmbperu.com` apunten a la IP pública del servidor antes de desplegar. No añada un dominio duplicado en la pestaña Domains de Dokploy.
 5. Despliegue y espere a que la base de datos y la API estén saludables.
 
-Producción no publica puertos en el host. Dokploy administra las rutas y redes del proxy mediante Domains. No hay que escribir labels manuales ni compartir la base de datos con el otro proyecto. El archivo de semilla se incluye en la imagen de la API, evitando depender de montajes de archivos del repositorio en el servidor.
+Producción no publica puertos en el host. El compose une únicamente `web` y `api` a `dokploy-network` y declara rutas Traefik explícitas, con redirección HTTPS y certificados Let's Encrypt. La base de datos se conserva aislada de esa red. El archivo de semilla se incluye en la imagen de la API, evitando depender de montajes de archivos del repositorio en el servidor.
 
 Mantenga el nombre de aplicación/proyecto que Dokploy ya asignó (`vmb-mapa-fon9ee`) para conservar el volumen `postgres_data` asociado. No elimine volúmenes ni cambie POSTGRES_PASSWORD de una base ya inicializada: cambiar la variable no modifica la contraseña almacenada en PostgreSQL.
 

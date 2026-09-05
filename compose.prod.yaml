@@ -2,6 +2,8 @@
 # Dokploy suministra las variables desde Environment.
 name: mapa-prod
 services:
+  # The HTTP routers below use this middleware to send all public traffic to HTTPS.
+  # It is declared on api because Traefik's Docker provider shares middleware labels.
   db:
     image: postgres:16-alpine
     command: ["postgres", "-p", "5544"]
@@ -29,6 +31,23 @@ services:
       SEED_FILE: /data/escuelas.json
     expose:
       - "8091"
+    networks:
+      - default
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.middlewares.vmb-mapa-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.vmb-mapa-https-redirect.redirectscheme.permanent=true"
+      - "traefik.http.services.vmb-mapa-api.loadbalancer.server.port=8091"
+      - "traefik.http.routers.vmb-mapa-api-http.rule=Host(`mapabackend.vmbperu.com`)"
+      - "traefik.http.routers.vmb-mapa-api-http.entrypoints=web"
+      - "traefik.http.routers.vmb-mapa-api-http.middlewares=vmb-mapa-https-redirect"
+      - "traefik.http.routers.vmb-mapa-api-https.rule=Host(`mapabackend.vmbperu.com`)"
+      - "traefik.http.routers.vmb-mapa-api-https.entrypoints=websecure"
+      - "traefik.http.routers.vmb-mapa-api-https.tls=true"
+      - "traefik.http.routers.vmb-mapa-api-https.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.vmb-mapa-api-https.service=vmb-mapa-api"
     depends_on:
       db:
         condition: service_healthy
@@ -45,9 +64,28 @@ services:
         VITE_API_URL: ${BACKEND_URL:-https://mapabackend.vmbperu.com}/api
     expose:
       - "8090"
+    networks:
+      - default
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.services.vmb-mapa-web.loadbalancer.server.port=8090"
+      - "traefik.http.routers.vmb-mapa-web-http.rule=Host(`mapa.vmbperu.com`)"
+      - "traefik.http.routers.vmb-mapa-web-http.entrypoints=web"
+      - "traefik.http.routers.vmb-mapa-web-http.middlewares=vmb-mapa-https-redirect"
+      - "traefik.http.routers.vmb-mapa-web-https.rule=Host(`mapa.vmbperu.com`)"
+      - "traefik.http.routers.vmb-mapa-web-https.entrypoints=websecure"
+      - "traefik.http.routers.vmb-mapa-web-https.tls=true"
+      - "traefik.http.routers.vmb-mapa-web-https.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.vmb-mapa-web-https.service=vmb-mapa-web"
     depends_on:
       api:
         condition: service_healthy
     restart: unless-stopped
 volumes:
   postgres_data:
+
+networks:
+  dokploy-network:
+    external: true
