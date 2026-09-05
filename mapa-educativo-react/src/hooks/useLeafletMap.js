@@ -71,7 +71,7 @@ export function useLeafletMap(mapContainerRef, { schools, onMapReady }) {
     // Base layers
     const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "&copy; OpenStreetMap",
-      maxZoom: 17,
+      maxZoom: 19,
     });
     const esriSatLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
       attribution: "&copy; Esri",
@@ -79,7 +79,7 @@ export function useLeafletMap(mapContainerRef, { schools, onMapReady }) {
     });
     const esriStreetsLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
       attribution: "&copy; Esri",
-      maxZoom: 17,
+      maxZoom: 19,
     });
 
     baseLayersRef.current = {
@@ -89,6 +89,13 @@ export function useLeafletMap(mapContainerRef, { schools, onMapReady }) {
     };
 
     esriSatLayer.addTo(map);
+
+    // Las capas de calles sí ofrecen teselas a mayor detalle. Al cambiar de
+    // capa actualizamos el límite para permitir acercamiento sin pedir al
+    // satélite zonas que no existen.
+    map.on("baselayerchange", ({ layer }) => {
+      map.setMaxZoom(layer.options.maxZoom || 17);
+    });
 
     // Layer control
     L.control.layers(baseLayersRef.current, null, { position: "topright", collapsed: true }).addTo(map);
