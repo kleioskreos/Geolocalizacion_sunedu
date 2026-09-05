@@ -63,6 +63,66 @@ function project(school, bounds, area) {
   };
 }
 
+function mercatorPoint(lat, lng, zoom) {
+  const scale = 256 * (2 ** zoom);
+  const radians = (Math.PI * coordinate(lat)) / 180;
+  return {
+    x: scale * ((coordinate(lng) + 180) / 360),
+    y: scale * (1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2,
+  };
+}
+
+function waitForTiles(layer) {
+  if (!layer.isLoading()) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timeout = window.setTimeout(resolve, 8000);
+    layer.once("load", () => {
+      window.clearTimeout(timeout);
+      window.setTimeout(resolve, 120);
+    });
+  });
+}
+
+export async function captureStreetMap(schools) {
+  const points = schoolsWithCoordinates(schools);
+  if (!points.length) return null;
+
+  const [{ default: L }, { default: html2canvas }] = await Promise.all([import("leaflet"), import("html2canvas")]);
+
+  const host = document.createElement("div");
+  host.setAttribute("aria-hidden", "true");
+  Object.assign(host.style, { position: "fixed", left: "-10000px", top: "0", width: "1230px", height: "805px", overflow: "hidden", zIndex: "-1" });
+  document.body.append(host);
+  let map;
+  try {
+    map = L.map(host, { attributionControl: false, zoomControl: false, fadeAnimation: false, zoomAnimation: false });
+    const streets = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors",
+      crossOrigin: "anonymous",
+      maxZoom: 19,
+    }).addTo(map);
+    const bounds = L.latLngBounds(points.map((school) => [coordinate(school.lat), coordinate(school.lng)]));
+    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15, animate: false });
+    await waitForTiles(streets);
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    const image = await html2canvas(host, { backgroundColor: "#f8fafc", logging: false, useCORS: true });
+    const zoom = map.getZoom();
+    const origin = map.getPixelOrigin();
+    return {
+      image,
+      project: (school) => {
+        const point = mercatorPoint(school.lat, school.lng, zoom);
+        return { x: point.x - origin.x, y: point.y - origin.y };
+      },
+    };
+  } catch {
+    return null;
+  } finally {
+    map?.remove();
+    host.remove();
+  }
+}
+
 function drawScale(ctx, bounds, area) {
   const latitude = (bounds.minLat + bounds.maxLat) / 2;
   const widthKm = (bounds.maxLng - bounds.minLng) * 111.32 * Math.cos((latitude * Math.PI) / 180);
@@ -82,7 +142,7 @@ function drawScale(ctx, bounds, area) {
   ctx.fillText(`${kilometres} km`, x, y - 10);
 }
 
-export function renderOfflineMapPage(allSchools, pageSchools, pageNumber, totalPages) {
+export function renderOfflineMapPage(allSchools, pageSchools, pageNumber, totalPages, streetMap) {
   const canvas = document.createElement("canvas");
   canvas.width = 1800;
   canvas.height = 1080;
@@ -101,12 +161,16 @@ export function renderOfflineMapPage(allSchools, pageSchools, pageNumber, totalP
   ctx.font = "400 22px Arial";
   ctx.fillText(`Plano sin conexión · página ${pageNumber} de ${totalPages} · ${allSchools.length.toLocaleString("es-PE")} instituciones`, 70, 94);
 
-  ctx.fillStyle = "#dbeaf0";
-  ctx.fillRect(area.x, area.y, area.width, area.height);
+  if (streetMap) {
+    ctx.drawImage(streetMap.image, area.x, area.y, area.width, area.height);
+  } else {
+    ctx.fillStyle = "#dbeaf0";
+    ctx.fillRect(area.x, area.y, area.width, area.height);
+  }
   ctx.strokeStyle = "#9cb8c8";
   ctx.lineWidth = 2;
   ctx.strokeRect(area.x, area.y, area.width, area.height);
-  ctx.strokeStyle = "#b9cdd8";
+  ctx.strokeStyle = streetMap ? "#ffffff99" : "#b9cdd8";
   ctx.lineWidth = 1;
   for (let step = 1; step < 6; step += 1) {
     const x = area.x + (area.width * step) / 6;
@@ -124,12 +188,18 @@ export function renderOfflineMapPage(allSchools, pageSchools, pageNumber, totalP
   for (let step = 0; step <= 6; step += 1) {
     const longitude = bounds.minLng + ((bounds.maxLng - bounds.minLng) * step) / 6;
     const latitude = bounds.maxLat - ((bounds.maxLat - bounds.minLat) * step) / 6;
-    ctx.fillText(`${longitude.toFixed(3)}°`, area.x + (area.width * step) / 6 - 25, area.y - 12);
-    ctx.fillText(`${latitude.toFixed(3)}°`, area.x + area.width + 10, area.y + (area.height * step) / 6 + 5);
+    if (!streetMap) {
+      ctx.fillText(`${longitude.toFixed(3)}°`, area.x + (area.width * step) / 6 - 25, area.y - 12);
+      ctx.fillText(`${latitude.toFixed(3)}°`, area.x + area.width + 10, area.y + (area.height * step) / 6 + 5);
+    }
   }
 
   for (const school of allSchools) {
-    const point = project(school, bounds, area);
+    const point = streetMap ? streetMap.project(school) : project(school, bounds, area);
+    if (streetMap) {
+      point.x += area.x;
+      point.y += area.y;
+    }
     ctx.fillStyle = "#7896a5";
     ctx.globalAlpha = 0.32;
     ctx.beginPath();
@@ -139,7 +209,11 @@ export function renderOfflineMapPage(allSchools, pageSchools, pageNumber, totalP
   ctx.globalAlpha = 1;
 
   for (const school of pageSchools) {
-    const point = project(school, bounds, area);
+    const point = streetMap ? streetMap.project(school) : project(school, bounds, area);
+    if (streetMap) {
+      point.x += area.x;
+      point.y += area.y;
+    }
     const index = indexes.get(school);
     ctx.fillStyle = "#c8262d";
     ctx.beginPath();
@@ -202,6 +276,6 @@ export function renderOfflineMapPage(allSchools, pageSchools, pageNumber, totalP
   ctx.font = "400 15px Arial";
   ctx.fillText("Rojo: instituciones de esta página", 70, 1022);
   ctx.fillText("Gris: resto de resultados del reporte", 470, 1022);
-  ctx.fillText("Coordenadas WGS84 · Elaborado desde el padrón local", 70, 1050);
+  ctx.fillText(streetMap ? "Base cartográfica © OpenStreetMap contributors · Coordenadas WGS84" : "Coordenadas WGS84 · Elaborado desde el padrón local", 70, 1050);
   return canvas.toDataURL("image/png");
 }
