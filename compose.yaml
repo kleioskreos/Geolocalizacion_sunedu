@@ -23,6 +23,8 @@ services:
       DATABASE_URL: postgres://geolocalizacion:${POSTGRES_PASSWORD}@db:5544/geolocalizacion?sslmode=disable
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Ejecute primero scripts/setup.ps1}
+      INTEGRATION_API_KEY: ${INTEGRATION_API_KEY:-}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8090}
       SEED_FILE: /data/escuelas.json
     volumes:
       - ./mapa-educativo-react/src/data/escuelas.json:/data/escuelas.json:ro

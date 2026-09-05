@@ -79,7 +79,7 @@ El frontend de producción se compila con `https://mapabackend.vmbperu.com/api`;
 | Consulta | Marcadores agrupados, ficha y tabla de resultados; selección de una fila centra el mapa |
 | Herramientas | Coordenadas, distancia, área aproximada, consulta y borrado |
 | Exportación | CSV/PDF del resultado filtrado; se deshabilita si no hay resultados |
-| Datos | Padrón local de Puno; puede ampliarse con XLSX |
+| Datos | Padrón local importado; puede ampliarse con XLSX |
 | Centros poblados | Filtro por los datos del padrón local; sin enlace en la cabecera |
 | Capas oficiales | No se incluyen límites censales ni la capa nacional de centros poblados de SIGMED |
 | Actualización | Importación local explícita; no se muestra como propia la fecha del portal oficial |
@@ -129,6 +129,39 @@ La prueba de integración verifica HTTP, salud de PostgreSQL, lectura del padró
 
 API: `GET /api/health`, `GET /api/schools`, `GET /api/import/template`, `POST /api/import` (multipart `file`, autenticación Basic). Las credenciales solo se envían al servicio local; para publicar fuera de este equipo se debe configurar HTTPS.
 
+## Integración con el sistema de matrículas
+
+El backend del sistema de matrículas debe enviar la lista de instituciones al mapa, nunca el navegador ni una URL con los datos de alumnos. El mapa crea una sesión temporal de 24 horas y devuelve una URL que muestra solo los centros ubicados. Configure la misma `INTEGRATION_API_KEY` larga en los dos backends; en Dokploy agréguela en **Environment** y despliegue de nuevo. La clave no se expone al frontend.
+
+```http
+POST https://mapabackend.vmbperu.com/api/integration/sessions
+X-Integration-Key: <clave-compartida>
+Content-Type: application/json
+
+{
+  "instituciones": [
+    {
+      "id": "institucion-estable-123",
+      "nombre": "I.E. 12345",
+      "lugar": "UGEL PUNO",
+      "codigoModular": "1234567"
+    }
+  ]
+}
+```
+
+Los campos `id`, `codigoModular`, `codigoInstitucion` y `codigoLocal` son opcionales, pero se recomienda siempre enviar un `id` estable y cualquier código disponible. La respuesta entrega `mapUrl`, `sessionId`, un resumen y un resultado por institución. Abra `mapUrl` desde el sistema de matrículas; el mapa centra y marca los servicios con estado `matched`.
+
+El orden de la coincidencia es: vínculo confirmado previamente, código exacto y nombre normalizado. Coincidencias de nombre parecidas o nombres repetidos se devuelven como `needs_review`; no se colocan en el mapa hasta confirmar la relación. Los casos sin candidato se devuelven como `unmatched`.
+
+Para confirmar una relación después de revisarla, un administrador del mapa puede crear o actualizar un vínculo usando la contraseña de importación mediante `POST /api/integration/links` con autenticación Basic y este cuerpo:
+
+```json
+{"externalId":"institucion-estable-123","schoolId":"<mapId devuelto por la API>","externalName":"I.E. 12345","externalPlace":"UGEL PUNO"}
+```
+
+La siguiente sesión reconocerá ese `externalId` como `matched`, aunque el texto del nombre tenga variaciones. `GET /api/integration/sessions/{sessionId}` es público solamente para que el navegador abra el enlace de sesión; el identificador tiene 192 bits aleatorios y vence a las 24 horas.
+
 Los archivos anteriores `mapa-educativo.html` y `parse_xls.py` se conservan como antecedentes y no forman parte del despliegue Docker.
 
 La bienvenida automática está desactivada. La apariencia VMB se adaptó de la captura aportada: azul marino, campos celestes, acentos azules y títulos serif. Las fuentes Inter y Playfair Display se sirven localmente.
@@ -142,7 +175,7 @@ La importación no solicita usuario. El servidor valida la contraseña con bcryp
 
 1. Suba los archivos modificados a la rama que Dokploy utiliza.
 2. Configure la ruta Compose como `./compose.prod.yaml`.
-3. En Environment, pegue las variables de `.env.prod` (archivo privado) o complete `.env.prod.example`. Dokploy no lee automáticamente un archivo llamado `.env.prod`; sus variables deben estar en Environment. En terminal sí se utiliza `--env-file .env.prod`.
+3. En Environment, pegue las variables de `.env.prod` (archivo privado) o complete `.env.prod.example`, incluida `INTEGRATION_API_KEY` si usará el enlace con matrículas. Dokploy no lee automáticamente un archivo llamado `.env.prod`; sus variables deben estar en Environment. En terminal sí se utiliza `--env-file .env.prod`.
 4. `compose.prod.yaml` configura las rutas Traefik y HTTPS directamente. Verifique que los registros A de `mapa.vmbperu.com` y `mapabackend.vmbperu.com` apunten a la IP pública del servidor antes de desplegar. No añada un dominio duplicado en la pestaña Domains de Dokploy.
 5. Despliegue y espere a que la base de datos y la API estén saludables.
 

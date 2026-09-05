@@ -21,17 +21,41 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resultsVisible, setResultsVisible] = useState(false);
+  const [matchSummary, setMatchSummary] = useState(null);
   const [activeTool, setActiveTool] = useState(null);
   const [coordDisplay, setCoordDisplay] = useState({ visible: false, lat: 0, lng: 0 });
   const toolRef=useRef(null);
+  const matchSessionRef=useRef(new URLSearchParams(window.location.search).get('match'));
   const loadSchools=useCallback(async()=>{
     setLoading(true);setError('');
-    try {const {data}=await api.get('/schools');setSchools(data.schools);setFilteredSchools([]);setResultsVisible(false)}
+    try {const {data}=await api.get('/schools');setSchools(data.schools);if(!matchSessionRef.current){setFilteredSchools([]);setResultsVisible(false)}}
     catch(err){setError(errorMessage(err))}finally{setLoading(false)}
   },[]);
   // Fetch the persisted dataset when the map mounts.
   // eslint-disable-next-line react/set-state-in-effect
   useEffect(()=>{loadSchools()},[loadSchools]);
+  useEffect(()=>{
+    const sessionId = matchSessionRef.current;
+    if (!sessionId) return;
+    let cancelled = false;
+    // eslint-disable-next-line react/set-state-in-effect
+    setLoading(true);
+    api.get(`/integration/sessions/${encodeURIComponent(sessionId)}`)
+      .then(({data})=>{
+        if (cancelled) return;
+        const matches = data.results.filter((result)=>result.status === 'matched' && result.school).map((result)=>result.school);
+        setFilteredSchools(matches);
+        setResultsVisible(true);
+        setMatchSummary({
+          matched: matches.length,
+          review: data.results.filter((result)=>result.status === 'needs_review').length,
+          unmatched: data.results.filter((result)=>result.status === 'unmatched').length,
+        });
+      })
+      .catch((err)=>{ if (!cancelled) setError(errorMessage(err)); })
+      .finally(()=>{ if (!cancelled) setLoading(false); });
+    return ()=>{cancelled=true};
+  },[]);
   useEffect(()=>{toolRef.current=activeTool},[activeTool]);
 
   const onMapReady = useCallback((map) => {
@@ -94,6 +118,7 @@ function App() {
   }, [activeTool, tools]);
 
   const handleSearch = useCallback((filters) => {
+    setMatchSummary(null);
     setFilteredSchools(filterSchools(schools,filters));
     setResultsVisible(true);
   }, [schools]);
@@ -102,6 +127,7 @@ function App() {
     flyToDefault();
     setResultsVisible(false);
     setTableOpen(false);
+    setMatchSummary(null);
   }, [flyToDefault]);
 
   const handleDeptoSelect = useCallback((depto) => {
@@ -135,6 +161,12 @@ function App() {
           <div ref={mapContainerRef} className="map" />
           <MapTools tools={toolButtons} onToolClick={handleToolClick} />
           <ResultsInfo count={filteredSchools.length} visible={resultsVisible} />
+          {matchSummary&&<aside className="match-summary" aria-live="polite">
+            <strong>Instituciones migradas</strong>
+            <span>{matchSummary.matched} ubicadas en el mapa</span>
+            {matchSummary.review>0&&<span>{matchSummary.review} requieren revisión</span>}
+            {matchSummary.unmatched>0&&<span>{matchSummary.unmatched} sin coincidencia</span>}
+          </aside>}
           <LoadingOverlay visible={loading} />
           <CoordDisplay {...coordDisplay} />
           {resultsVisible&&<ExportButton data={exportData} onTable={()=>setTableOpen(v=>!v)} />}

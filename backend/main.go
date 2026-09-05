@@ -30,6 +30,7 @@ import (
 var schema string
 
 type School struct {
+	MapID             string  `json:"mapId,omitempty"`
 	CodigoInstitucion string  `json:"codigoInstitucion"`
 	CodigoModular     string  `json:"codigoModular"`
 	Nombre            string  `json:"nombre"`
@@ -79,18 +80,28 @@ type server struct{ db *pgxpool.Pool }
 func (s *server) schools(c fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	rows, err := s.db.Query(ctx, "SELECT data FROM schools ORDER BY data->>'nombre',id")
+	rows, err := s.db.Query(ctx, "SELECT id,data FROM schools ORDER BY data->>'nombre',id")
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	result := make([]json.RawMessage, 0)
 	for rows.Next() {
+		var id string
 		var data []byte
-		if err = rows.Scan(&data); err != nil {
+		if err = rows.Scan(&id, &data); err != nil {
 			return err
 		}
-		result = append(result, json.RawMessage(data))
+		var school School
+		if err = json.Unmarshal(data, &school); err != nil {
+			return err
+		}
+		school.MapID = id
+		payload, err := json.Marshal(school)
+		if err != nil {
+			return err
+		}
+		result = append(result, json.RawMessage(payload))
 	}
 	if err = rows.Err(); err != nil {
 		return err
@@ -193,7 +204,7 @@ func main() {
 	}})
 	app.Use(recover.New())
 	if origin := os.Getenv("FRONTEND_URL"); origin != "" {
-		app.Use(cors.New(cors.Config{AllowOrigins: []string{origin}, AllowMethods: []string{"GET", "POST", "OPTIONS"}, AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"}}))
+		app.Use(cors.New(cors.Config{AllowOrigins: []string{origin}, AllowMethods: []string{"GET", "POST", "OPTIONS"}, AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Integration-Key"}}))
 	}
 	app.Get("/api/health", func(c fiber.Ctx) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -204,6 +215,9 @@ func main() {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 	app.Get("/api/schools", s.schools)
+	app.Post("/api/integration/sessions", limiter.New(limiter.Config{Max: 30, Expiration: time.Minute}), s.integrationAuthorize, s.createMatchSession)
+	app.Get("/api/integration/sessions/:id", s.getMatchSession)
+	app.Post("/api/integration/links", limiter.New(limiter.Config{Max: 20, Expiration: time.Minute}), s.authorize, s.saveInstitutionLink)
 	app.Get("/api/import/template", template)
 	app.Post("/api/import", limiter.New(limiter.Config{Max: 10, Expiration: time.Minute}), s.authorize, s.importXLSX)
 	go func() {
